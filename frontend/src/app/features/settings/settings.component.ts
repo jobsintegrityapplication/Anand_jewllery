@@ -97,6 +97,7 @@ import {AuthService} from '../../core/auth.service';
         </table>
       </div>
     }
+  }
 </div>
 
 <div class="card">
