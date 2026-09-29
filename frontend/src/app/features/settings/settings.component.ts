@@ -19,10 +19,10 @@ import {AuthService} from '../../core/auth.service';
   <div class="card">
     <h2 class="card-title">Account</h2>
     @if (auth.user(); as u) {
-      <dl class="info-list">
-        <div class="info-row"><dt>User</dt><dd>#{{u.id}}</dd></div>
-        <div class="info-row"><dt>Role</dt><dd><span class="badge {{u.role==='ADMIN'?'badge-sent':'badge-default'}}">{{u.role}}</span></dd></div>
-      </dl>
+      <div class="info-list">
+        <div class="info-row"><span>User</span><span>#{{u.id}}</span></div>
+        <div class="info-row"><span>Role</span><span class="badge {{u.role==='ADMIN'?'badge-sent':'badge-default'}}">{{u.role}}</span></div>
+      </div>
     }
     <p class="muted">Roles: ADMIN has full access. STAFF can manage customers, orders, item tracking and notifications with limited inventory access.</p>
     <button class="btn secondary" (click)="auth.logout()">Logout</button>
@@ -97,7 +97,6 @@ import {AuthService} from '../../core/auth.service';
         </table>
       </div>
     }
-  </div>
 </div>
 
 <div class="card">

@@ -152,11 +152,14 @@ export class CustomerDetailComponent implements OnInit{
 
   private get id(){return this.customer()?.id||0;}
 
-  load(id:number){
+  load(id?:number){
+    const target=id??this.customer()?.id;
+    if(!target) return;
     this.loading.set(true); this.error.set('');
-    this.http.get<Customer>(`/api/customers/${id}`).subscribe({
+    this.http.get<Customer>(`/api/customers/${target}`).subscribe({
       next:c=>{this.customer.set(c);this.loading.set(false);
-        this.http.get<CustomerSummary>(`/api/customers/${id}/summary`).subscribe({next:s=>this.summary.set(s),error:()=>this.summary.set(null)});},
+        this.loadOrders();
+        this.http.get<CustomerSummary>(`/api/customers/${target}/summary`).subscribe({next:s=>this.summary.set(s),error:()=>this.summary.set(null)});},
       error:err=>{this.loading.set(false);this.error.set(this.messageText(err,'Could not load the customer.'));}
     });
   }

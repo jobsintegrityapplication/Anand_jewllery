@@ -4,7 +4,6 @@ import {FormsModule} from '@angular/forms';
 import {HttpClient,HttpParams} from '@angular/common/http';
 import {ActivatedRoute,Router,RouterLink} from '@angular/router';
 import {Customer} from '../../core/models';
-import {StatusBadgeComponent} from '../../shared/status-badge.component';
 import {PaginationComponent} from '../../shared/pagination.component';
 import {ToastService} from '../../shared/toast.service';
 
@@ -12,7 +11,7 @@ interface CustomerForm{name:string;phone:string;email:string;address:string;what
 
 const EMPTY_FORM:CustomerForm={name:'',phone:'',email:'',address:'',whatsapp_opt_in:false,notes:''};
 
-@Component({selector:'app-customers',standalone:true,imports:[CommonModule,FormsModule,StatusBadgeComponent,PaginationComponent,RouterLink],template:`
+@Component({selector:'app-customers',standalone:true,imports:[CommonModule,FormsModule,PaginationComponent,RouterLink],template:`
 <div class="page-head">
   <div>
     <h1 class="page-title">Customers</h1>
@@ -22,7 +21,7 @@ const EMPTY_FORM:CustomerForm={name:'',phone:'',email:'',address:'',whatsapp_opt
 </div>
 
 <div class="card filter-bar">
-  <input class="input" placeholder="Search by name, phone or email…" [ngModel]="q" [ngModelOptions]="{debounce:300}" (ngModelChange)="onSearch($event)">
+  <input class="input" placeholder="Search by name, phone or email…" [ngModel]="q" (ngModelChange)="onSearch($event)">
 </div>
 
 @if (loading()) {

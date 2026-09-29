@@ -22,7 +22,7 @@ const EMPTY_PRODUCT:ProductForm={sku:'',name:'',category:'GOLD',description:'',u
 </div>
 
 <div class="card filter-bar">
-  <input class="input grow" placeholder="Search by SKU or name…" [ngModel]="q" [ngModelOptions]="{debounce:300}" (ngModelChange)="onSearch($event)">
+  <input class="input grow" placeholder="Search by SKU or name…" [ngModel]="q" (ngModelChange)="onSearch($event)">
   <select class="input" [ngModel]="category" (ngModelChange)="onCategory($event)">
     <option value="">All categories</option>
     @for (c of PRODUCT_CATEGORIES; track c) { <option [value]="c">{{c}}</option> }

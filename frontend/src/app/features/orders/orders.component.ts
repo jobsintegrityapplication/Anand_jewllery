@@ -18,7 +18,7 @@ import {ToastService} from '../../shared/toast.service';
 </div>
 
 <div class="card filter-bar">
-  <input class="input grow" placeholder="Search by order number, customer or phone…" [ngModel]="q" [ngModelOptions]="{debounce:300}" (ngModelChange)="onSearch($event)">
+  <input class="input grow" placeholder="Search by order number, customer or phone…" [ngModel]="q" (ngModelChange)="onSearch($event)">
   <select class="input" [ngModel]="status" (ngModelChange)="onStatus($event)">
     <option value="">All statuses</option>
     @for (s of ORDER_STATUSES; track s) { <option [value]="s">{{s}}</option> }

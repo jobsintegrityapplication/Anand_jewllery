@@ -6,10 +6,11 @@ import {Notification,Customer} from '../../core/models';
 import {StatusBadgeComponent} from '../../shared/status-badge.component';
 import {PaginationComponent} from '../../shared/pagination.component';
 import {ToastService} from '../../shared/toast.service';
+import {RouterLink} from '@angular/router';
 
 const NOTIFICATION_TYPES=['ORDER_CREATED','ORDER_IN_PROGRESS','ORDER_READY','ORDER_DELIVERED','CUSTOM'];
 
-@Component({selector:'app-notifications',standalone:true,imports:[CommonModule,FormsModule,StatusBadgeComponent,PaginationComponent],template:`
+@Component({selector:'app-notifications',standalone:true,imports:[CommonModule,FormsModule,StatusBadgeComponent,PaginationComponent,RouterLink],template:`
 <div class="page-head">
   <div>
     <h1 class="page-title">Notifications</h1>

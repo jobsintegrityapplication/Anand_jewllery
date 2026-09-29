@@ -7,7 +7,7 @@ import {DashboardSummary} from '../../core/models';
 import {StatusBadgeComponent} from '../../shared/status-badge.component';
 import {ToastService} from '../../shared/toast.service';
 
-@Component({selector:'app-dashboard',standalone:true,imports:[CommonModule,FormsModule,StatusBadgeComponent],template:`
+@Component({selector:'app-dashboard',standalone:true,imports:[CommonModule,FormsModule,StatusBadgeComponent,RouterLink],template:`
 <div class="page-head">
   <div>
     <h1 class="page-title">Dashboard</h1>
