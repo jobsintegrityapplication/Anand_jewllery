@@ -1,0 +1,191 @@
+import {Component,inject,signal,OnInit} from '@angular/core';
+import {CommonModule} from '@angular/common';
+import {FormsModule} from '@angular/forms';
+import {HttpClient} from '@angular/common/http';
+import {AppUser,AppSettings} from '../../core/models';
+import {StatusBadgeComponent} from '../../shared/status-badge.component';
+import {ToastService} from '../../shared/toast.service';
+import {AuthService} from '../../core/auth.service';
+
+@Component({selector:'app-settings',standalone:true,imports:[CommonModule,FormsModule,StatusBadgeComponent],template:`
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Settings</h1>
+    <p class="page-sub">Account, users and integration status</p>
+  </div>
+</div>
+
+<div class="grid dash-grid">
+  <div class="card">
+    <h2 class="card-title">Account</h2>
+    @if (auth.user(); as u) {
+      <dl class="info-list">
+        <div class="info-row"><dt>User</dt><dd>#{{u.id}}</dd></div>
+        <div class="info-row"><dt>Role</dt><dd><span class="badge {{u.role==='ADMIN'?'badge-sent':'badge-default'}}">{{u.role}}</span></dd></div>
+      </dl>
+    }
+    <p class="muted">Roles: ADMIN has full access. STAFF can manage customers, orders, item tracking and notifications with limited inventory access.</p>
+    <button class="btn secondary" (click)="auth.logout()">Logout</button>
+  </div>
+
+  <div class="card">
+    <h2 class="card-title">Integration Status</h2>
+    @if (appSettings(); as s) {
+      <ul class="list">
+        <li class="list-row">
+          <span>WhatsApp Cloud API</span>
+          @if (s.whatsapp_configured) { <span class="badge badge-sent">Configured</span> }
+          @else if (s.whatsapp_enabled) { <span class="badge badge-failed">Missing credentials</span> }
+          @else { <span class="badge badge-hold">Disabled (dev provider)</span> }
+        </li>
+        <li class="list-row">
+          <span>Photo storage (S3/MinIO)</span>
+          @if (s.s3_configured) { <span class="badge badge-sent">Configured</span> } @else { <span class="badge badge-hold">Not configured</span> }
+        </li>
+        <li class="list-row"><span>Public URL</span><span class="muted">{{s.app_public_url}}</span></li>
+      </ul>
+    } @else { <p class="muted">Loading…</p> }
+    <p class="muted">Configure these values in the server’s <code>.env</code> file. Secrets are never stored in the browser or this codebase.</p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head">
+    <h2 class="card-title">User Management</h2>
+  </div>
+  @if (!auth.isAdmin()) {
+    <p class="muted">User management is available to ADMIN users only.</p>
+  } @else {
+    <form class="row user-form" (ngSubmit)="createUser()">
+      <input class="input" placeholder="Username" name="uusername" [(ngModel)]="newUser.username" required>
+      <input class="input" type="password" placeholder="Password" name="upassword" [(ngModel)]="newUser.password" required>
+      <select class="input" name="urole" [(ngModel)]="newUser.role">
+        <option value="STAFF">STAFF</option>
+        <option value="ADMIN">ADMIN</option>
+      </select>
+      <button class="btn primary" type="submit" [disabled]="savingUser()">Add User</button>
+    </form>
+    @if (userError()) { <div class="error">{{userError()}}</div> }
+    @if (usersLoading()) {
+      <div class="empty"><div class="spinner"></div><p class="muted">Loading users…</p></div>
+    } @else if (!users().length) {
+      <p class="muted">No users found.</p>
+    } @else {
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Username</th><th>Role</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead>
+          <tbody>
+            @for (u of users(); track u.id) {
+              <tr>
+                <td>{{u.username}}</td>
+                <td><span class="badge {{u.role==='ADMIN'?'badge-sent':'badge-default'}}">{{u.role}}</span></td>
+                <td><app-status-badge [status]="u.is_active?'ACTIVE':'INACTIVE'"/></td>
+                <td class="muted">{{u.created_at | date:'mediumDate'}}</td>
+                <td class="actions-cell">
+                  <button class="btn secondary small" (click)="resetPassword(u)">Reset password</button>
+                  @if (u.id!==auth.user()?.id) {
+                    @if (u.is_active) {
+                      <button class="btn danger small" (click)="setActive(u,false)">Deactivate</button>
+                    } @else {
+                      <button class="btn primary small" (click)="setActive(u,true)">Activate</button>
+                    }
+                  } @else { <span class="muted small-label">You</span> }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </div>
+</div>
+
+<div class="card">
+  <h2 class="card-title">API Reference</h2>
+  <p class="muted">The backend exposes an OpenAPI schema at <a class="link" href="/api/docs" target="_blank" rel="noopener">/api/docs</a>.</p>
+  <ul class="list">
+    <li class="list-row"><span>Authentication</span><span class="muted mono">POST /api/auth/login</span></li>
+    <li class="list-row"><span>Customers</span><span class="muted mono">GET/POST/PATCH/DELETE /api/customers</span></li>
+    <li class="list-row"><span>Orders & items</span><span class="muted mono">GET/POST/PATCH/DELETE /api/orders</span></li>
+    <li class="list-row"><span>Inventory</span><span class="muted mono">GET/POST/PATCH/DELETE /api/products</span></li>
+    <li class="list-row"><span>Notifications</span><span class="muted mono">GET/POST /api/notifications</span></li>
+    <li class="list-row"><span>Reports</span><span class="muted mono">GET /api/reports/summary</span></li>
+    <li class="list-row"><span>Audit trail</span><span class="muted mono">GET /api/audit (admin)</span></li>
+    <li class="list-row"><span>Users</span><span class="muted mono">GET/POST/PATCH /api/users (admin)</span></li>
+  </ul>
+</div>
+`})
+export class SettingsComponent implements OnInit{
+  private http=inject(HttpClient);
+  private toast=inject(ToastService);
+  auth=inject(AuthService);
+
+  readonly users=signal<AppUser[]>([]);
+  readonly appSettings=signal<AppSettings|null>(null);
+  readonly usersLoading=signal(false);
+  readonly savingUser=signal(false);
+  readonly userError=signal('');
+  newUser={username:'',password:'',role:'STAFF'};
+
+  ngOnInit(){
+    this.loadUsers();
+    this.http.get<AppSettings>('/api/settings').subscribe({
+      next:s=>this.appSettings.set(s),
+      error:()=>this.appSettings.set(null)
+    });
+  }
+
+  loadUsers(){
+    this.usersLoading.set(true);
+    this.http.get<AppUser[]>('/api/users').subscribe({
+      next:u=>{this.users.set(u);this.usersLoading.set(false);},
+      error:()=>{this.users.set([]);this.usersLoading.set(false);}
+    });
+  }
+
+  createUser(){
+    if(this.savingUser()) return;
+    if(!this.newUser.username.trim()||!this.newUser.password){
+      this.userError.set('Enter a username and password.');
+      return;
+    }
+    if(this.newUser.password.length<8){
+      this.userError.set('Password must be at least 8 characters.');
+      return;
+    }
+    this.savingUser.set(true); this.userError.set('');
+    this.http.post<AppUser>('/api/users',{username:this.newUser.username.trim(),password:this.newUser.password,role:this.newUser.role}).subscribe({
+      next:()=>{
+        this.savingUser.set(false);
+        this.toast.success('User created.');
+        this.newUser={username:'',password:'',role:'STAFF'};
+        this.loadUsers();
+      },
+      error:err=>{
+        this.savingUser.set(false);
+        const detail=(err as {error?:{detail?:string}})?.error?.detail;
+        this.userError.set(typeof detail==='string'?detail:'Could not create the user.');
+      }
+    });
+  }
+
+  resetPassword(u:AppUser){
+    const password=prompt(`New password for ${u.username} (min 8 characters):`);
+    if(!password) return;
+    if(password.length<8){this.toast.error('Password must be at least 8 characters.');return;}
+    this.http.patch<AppUser>(`/api/users/${u.id}`,{password}).subscribe({
+      next:()=>this.toast.success('Password updated.'),
+      error:()=>this.toast.error('Could not update the password.')
+    });
+  }
+
+  setActive(u:AppUser,active:boolean){
+    this.http.patch<AppUser>(`/api/users/${u.id}`,{is_active:active}).subscribe({
+      next:()=>{this.toast.success(active?'User activated.':'User deactivated.');this.loadUsers();},
+      error:err=>{
+        const detail=(err as {error?:{detail?:string}})?.error?.detail;
+        this.toast.error(typeof detail==='string'?detail:'Could not update the user.');
+      }
+    });
+  }
+}

@@ -1,0 +1,2 @@
+import {Injectable,inject} from '@angular/core';import {HttpClient} from '@angular/common/http';import {Observable} from 'rxjs';
+@Injectable({providedIn:'root'}) export class ApiService{http=inject(HttpClient);base='/api';get<T>(p:string):Observable<T>{return this.http.get<T>(this.base+p)}post<T>(p:string,b:any):Observable<T>{return this.http.post<T>(this.base+p,b)}patch<T>(p:string,b:any):Observable<T>{return this.http.patch<T>(this.base+p,b)}delete<T>(p:string):Observable<T>{return this.http.delete<T>(this.base+p)} }
