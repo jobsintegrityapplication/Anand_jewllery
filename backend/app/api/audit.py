@@ -4,7 +4,7 @@ from app.db.session import get_db
 from app.models.audit import AuditLog
 from app.schemas.audit import AuditOut
 from app.core.security import require_roles
-router=APIRouter(prefix='/audit',tags=['audit'],description='Audit trail for important actions. Admin role required.')
+router=APIRouter(prefix='/audit',tags=['audit'])
 @router.get('',response_model=list[AuditOut],summary='List audit events with entity/event-type/order filters')
 def list_audit(response:Response,entity:str|None=None,entity_id:int|None=None,event_type:str|None=None,order_id:int|None=None,limit:int=100,skip:int=0,db:Session=Depends(get_db),_=Depends(require_roles('ADMIN'))):
     query=db.query(AuditLog).order_by(AuditLog.created_at.desc(),AuditLog.id.desc())

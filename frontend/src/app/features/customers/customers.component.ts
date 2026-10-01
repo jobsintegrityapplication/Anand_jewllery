@@ -21,7 +21,7 @@ const EMPTY_FORM:CustomerForm={name:'',phone:'',email:'',address:'',whatsapp_opt
 </div>
 
 <div class="card filter-bar">
-  <input class="input" placeholder="Search by name, phone or email…" [ngModel]="q" (ngModelChange)="onSearch($event)">
+  <input class="input" aria-label="Search customers by name or mobile number" placeholder="Search by name or mobile number…" [ngModel]="q" (ngModelChange)="onSearch($event)">
 </div>
 
 @if (loading()) {
@@ -40,15 +40,16 @@ const EMPTY_FORM:CustomerForm={name:'',phone:'',email:'',address:'',whatsapp_opt
   <div class="card">
     <div class="table-wrap">
       <table class="table">
-        <thead><tr><th>Name</th><th>Phone</th><th>WhatsApp</th><th>Email</th><th>Added</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Name</th><th>Mobile</th><th>Email</th><th>Orders</th><th>Latest status</th><th>WhatsApp</th><th>Actions</th></tr></thead>
         <tbody>
           @for (c of customers(); track c.id) {
             <tr>
               <td><a class="link" [routerLink]="['/customers',c.id]">{{c.name}}</a></td>
-              <td>{{c.phone}}</td>
-              <td>@if (c.whatsapp_opt_in) { <span class="badge badge-sent">Opted in</span> } @else { <span class="badge badge-hold">No</span> }</td>
+              <td><a class="link" [href]="'tel:'+c.phone">{{c.phone}}</a></td>
               <td class="muted">{{c.email||'—'}}</td>
-              <td class="muted">{{c.created_at | date:'mediumDate'}}</td>
+              <td>{{c.order_count||0}}</td>
+              <td>@if (c.latest_order_status) { <span class="badge badge-default">{{c.latest_order_status}}</span> } @else { <span class="muted">No orders</span> }</td>
+              <td>@if (c.whatsapp_opt_in) { <span class="badge badge-sent">Opted in</span> } @else { <span class="badge badge-hold">No</span> }</td>
               <td class="actions-cell">
                 <a class="btn secondary small" [routerLink]="['/customers',c.id]">View</a>
                 <button class="btn secondary small" (click)="openEdit(c)">Edit</button>
@@ -74,7 +75,7 @@ const EMPTY_FORM:CustomerForm={name:'',phone:'',email:'',address:'',whatsapp_opt
         </div>
         <div class="field">
           <label>Mobile number</label>
-          <input class="input" name="cphone" [(ngModel)]="formState.phone" placeholder="+9198…" required>
+          <input class="input" name="cphone" [(ngModel)]="formState.phone" placeholder="+91 98765 43210" pattern="^\\+?[0-9][0-9\\s\\-]{5,18}$" minlength="8" maxlength="20" required>
         </div>
         <div class="field">
           <label>Email</label>

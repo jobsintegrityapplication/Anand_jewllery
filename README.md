@@ -8,6 +8,7 @@ Production-oriented baseline for the Anand Jewellers application:
 - S3/MinIO object storage for jewellery photos
 - Redis + Celery for asynchronous notifications
 - JWT authentication + role-based access
+- Month-filtered business dashboard and administrator security access history
 - QR code generation
 - WhatsApp Cloud API integration
 - Docker Compose for local/staging/production deployment

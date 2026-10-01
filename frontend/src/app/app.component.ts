@@ -18,6 +18,7 @@ import {ToastService} from './shared/toast.service';
       <a routerLink="/notifications" routerLinkActive="active" (click)="close()"><span class="nav-icon">◉</span>Notifications</a>
       <a routerLink="/reports" routerLinkActive="active" (click)="close()"><span class="nav-icon">▥</span>Reports</a>
       <a routerLink="/settings" routerLinkActive="active" (click)="close()"><span class="nav-icon">⚙</span>Settings</a>
+      <a *ngIf="auth.isAdmin()" routerLink="/security" routerLinkActive="active" (click)="close()"><span class="nav-icon">⌑</span>Security</a>
     </nav>
     <div class="sidebar-footer" *ngIf="auth.user() as user"><span class="avatar">AJ</span><span class="profile-copy"><strong>Team member {{user.id}}</strong><small>{{user.role}}</small></span><button type="button" class="logout-icon" aria-label="Log out" (click)="auth.logout()">↗</button></div>
   </aside>

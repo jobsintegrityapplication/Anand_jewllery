@@ -11,13 +11,16 @@ class Product(Base):
     description:Mapped[str|None]=mapped_column(Text)
     unit_weight_g:Mapped[float|None]=mapped_column(Numeric(10,3))
     price:Mapped[float|None]=mapped_column(Numeric(12,2))
-    quantity:Mapped[int]=mapped_column(Integer,default=0)
-    reserved_quantity:Mapped[int]=mapped_column(Integer,default=0,server_default='0')
-    min_quantity:Mapped[int]=mapped_column(Integer,default=2)
+    quantity:Mapped[float]=mapped_column(Numeric(12,3),default=0)
+    reserved_quantity:Mapped[float]=mapped_column(Numeric(12,3),default=0,server_default='0')
+    min_quantity:Mapped[float]=mapped_column(Numeric(12,3),default=2)
+    unit:Mapped[str]=mapped_column(String(12),default='pcs',server_default='pcs')
+    purity:Mapped[str|None]=mapped_column(String(24))
     is_active:Mapped[bool]=mapped_column(Boolean,default=True)
     created_at:Mapped[DateTime]=mapped_column(DateTime(timezone=True),server_default=func.now())
     updated_at:Mapped[DateTime]=mapped_column(DateTime(timezone=True),server_default=func.now(),onupdate=func.now())
     order_items=relationship('OrderItem',back_populates='product')
+    transactions=relationship('InventoryTransaction',back_populates='product')
     @property
-    def available_quantity(self)->int:
+    def available_quantity(self)->float:
         return self.quantity-self.reserved_quantity

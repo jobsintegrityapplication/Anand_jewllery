@@ -14,7 +14,8 @@ import {ProductsComponent} from './app/features/products/products.component';
 import {NotificationsComponent} from './app/features/notifications/notifications.component';
 import {ReportsComponent} from './app/features/reports/reports.component';
 import {SettingsComponent} from './app/features/settings/settings.component';
-import {authGuard} from './app/core/auth.guard';
+import {SecurityComponent} from './app/features/settings/security.component';
+import {adminGuard,authGuard} from './app/core/auth.guard';
 
 const routes:Routes=[
   {path:'login',component:LoginComponent},
@@ -28,6 +29,7 @@ const routes:Routes=[
   {path:'notifications',canActivate:[authGuard],component:NotificationsComponent},
   {path:'reports',canActivate:[authGuard],component:ReportsComponent},
   {path:'settings',canActivate:[authGuard],component:SettingsComponent},
+  {path:'security',canActivate:[adminGuard],component:SecurityComponent},
   {path:'**',redirectTo:''},
 ];
 

@@ -5,7 +5,7 @@ from app.models.user import User
 from app.schemas.user import UserCreate,UserUpdate,UserOut
 from app.core.security import require_roles,hash_password
 from app.services.audit import record_audit
-router=APIRouter(prefix='/users',tags=['users'],description='User management. All endpoints require the ADMIN role.')
+router=APIRouter(prefix='/users',tags=['users'])
 @router.get('',response_model=list[UserOut],summary='List users (admin only)')
 def list_users(db:Session=Depends(get_db),_=Depends(require_roles('ADMIN'))):
     return db.query(User).order_by(User.id.asc()).all()

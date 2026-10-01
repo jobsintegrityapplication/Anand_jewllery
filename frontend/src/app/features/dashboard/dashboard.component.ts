@@ -3,7 +3,7 @@ import {CommonModule} from '@angular/common';
 import {FormsModule} from '@angular/forms';
 import {HttpClient} from '@angular/common/http';
 import {Router,RouterLink} from '@angular/router';
-import {DashboardSummary} from '../../core/models';
+import {Customer,DashboardSummary} from '../../core/models';
 import {StatusBadgeComponent} from '../../shared/status-badge.component';
 import {ToastService} from '../../shared/toast.service';
 
@@ -16,8 +16,31 @@ import {ToastService} from '../../shared/toast.service';
   } @else if (summary(); as s) {
     <div class="welcome-row">
       <div><span class="section-kicker">CLIENT WORKSPACE</span><h1>Orders, made personal.</h1><p>Every detail, thoughtfully in progress.</p></div>
-      <div class="welcome-actions"><label class="search-box"><span>⌕</span><input aria-label="Search customers" placeholder="Find a customer or order" [(ngModel)]="search" (keyup.enter)="goSearch()"><kbd>↵</kbd></label><button class="btn primary" routerLink="/orders/new"><span>＋</span> New order</button></div>
+      <div class="welcome-actions">
+        <div class="dashboard-search-wrap">
+          <label class="search-box"><span>⌕</span><input aria-label="Search customers" placeholder="Find a customer by name or mobile" autocomplete="off" role="combobox" [attr.aria-expanded]="suggestOpen()" [(ngModel)]="search" (ngModelChange)="suggestCustomers($event)" (keyup.enter)="goSearch()" (blur)="hideSuggestions()"><kbd>↵</kbd></label>
+          <div class="dashboard-suggestions" *ngIf="suggestOpen()">
+            <button type="button" *ngFor="let customer of customerSuggestions()" (mousedown)="$event.preventDefault()" (click)="openCustomer(customer)"><strong>{{customer.name}}</strong><small>{{customer.phone}}</small></button>
+          </div>
+        </div>
+        <div class="dashboard-quick-actions"><a class="btn secondary" routerLink="/customers">Add customer</a><a class="btn primary" routerLink="/orders/new"><span>＋</span> New order</a><a class="btn secondary" routerLink="/orders">View orders</a></div>
+      </div>
     </div>
+
+    <section class="month-overview glass-panel">
+      <div class="month-overview-head"><div><span class="section-kicker">MONTHLY SNAPSHOT</span><h2>{{monthLabel()}}</h2></div><label class="month-picker">Month<input class="input" type="month" [(ngModel)]="month" (ngModelChange)="load()"></label><button class="btn secondary small" type="button" (click)="load()">Refresh</button></div>
+      <p class="month-saved muted" *ngIf="s.saved_at">Saved for {{s.month}} at {{s.saved_at | date:'medium'}}</p>
+      <div class="month-kpis">
+        <article><span>Total customers</span><strong>{{s.customers_total}}</strong></article>
+        <article><span>Total orders</span><strong>{{s.orders_total}}</strong></article>
+        <article><span>Open orders</span><strong>{{s.orders_open}}</strong></article>
+        <article><span>Ready orders</span><strong>{{s.orders_ready}}</strong></article>
+        <article><span>Delivered</span><strong>{{s.orders_delivered}}</strong></article>
+        <article><span>Pending items</span><strong>{{s.items_pending}}</strong></article>
+        <article><span>Ready items</span><strong>{{s.items_ready}}</strong></article>
+        <article><span>WhatsApp queued / failed</span><strong>{{s.notifications_queued}} / {{s.notifications_failed}}</strong></article>
+      </div>
+    </section>
 
     <div class="hero-panel glass-panel">
       @if (s.recent_orders[0]; as order) {
@@ -27,7 +50,7 @@ import {ToastService} from '../../shared/toast.service';
         </div>
         <div class="hero-stats">
           <div class="stat-block"><span class="stat-ring gold-ring">✧</span><span><small>OPEN ORDERS</small><strong>{{s.orders_open + s.orders_in_progress + s.orders_partially_ready}}</strong></span></div>
-          <div class="hero-wave" aria-label="Orders over the last fourteen days"><span *ngFor="let b of s.orders_over_time; let i=index" [style.height.%]="barHeight(b.count)" [class.wave-highlight]="i===s.orders_over_time.length-1"></span></div>
+          <div class="hero-wave" aria-label="Orders created during the selected month"><span *ngFor="let b of s.orders_over_time; let i=index" [attr.title]="b.date + ': ' + b.count + ' orders'" [style.height.%]="barHeight(b.count)" [class.wave-highlight]="i===s.orders_over_time.length-1"></span></div>
           <div class="stat-block"><span class="stat-ring blue-ring">◇</span><span><small>READY PIECES</small><strong>{{s.items_ready}} <em>pieces</em></strong></span></div>
         </div>
         <button class="icon-action refresh-action" type="button" aria-label="Refresh dashboard" (click)="load()">↻</button>
@@ -82,6 +105,13 @@ import {ToastService} from '../../shared/toast.service';
           @if (s.low_stock.length) { @for (p of s.low_stock.slice(0,3); track p.id) { <div class="stock-line"><span class="stock-gem">◇</span><span class="stock-copy"><strong>{{p.name}}</strong><small>{{p.sku}}</small></span><span class="stock-count">{{p.available_quantity}} left</span></div> } }
           @else { <p class="aside-empty">Your showcase is well stocked.</p> }
         </section>
+        <section class="glass-panel status-panel"><div class="side-heading"><div><span class="section-kicker">WORKSHOP</span><h2>Status summary</h2></div></div>
+          <div class="status-line" *ngFor="let row of statusRows()"><span>{{row.status}}</span><i><b [style.width.%]="row.pct"></b></i><strong>{{row.count}}</strong></div>
+        </section>
+        <section class="glass-panel recent-customers-panel"><div class="side-heading"><div><span class="section-kicker">CLIENTS</span><h2>Recent customers</h2></div><a class="text-link" routerLink="/customers">All <span>↗</span></a></div>
+          <a class="recent-customer" *ngFor="let customer of s.recent_customers" [routerLink]="['/customers',customer.id]"><strong>{{customer.name}}</strong><small>{{customer.phone}}</small></a>
+          <p class="aside-empty" *ngIf="!s.recent_customers.length">No customers in this month yet.</p>
+        </section>
       </aside>
     </div>
   }
@@ -95,13 +125,18 @@ export class DashboardComponent implements OnInit{
   readonly loading=signal(false);
   readonly error=signal('');
   search='';
+  month=this.currentMonth();
+  readonly customerSuggestions=signal<Customer[]>([]);
+  readonly suggestOpen=signal(false);
+  private suggestTimer:ReturnType<typeof setTimeout>|undefined;
+  private suggestRequest=0;
 
   readonly statusRows=computed(()=>{
     const s=this.summary();
     if(!s) return [];
-    const entries=Object.entries(s.orders_by_status);
-    const max=Math.max(1,...entries.map(e=>e[1]));
-    return entries.sort((a,b)=>b[1]-a[1]).map(([status,count])=>({status,count,pct:Math.round((count/max)*100)}));
+    const entries=['OPEN','IN_PROGRESS','PARTIALLY_READY','READY','DELIVERED','CANCELLED'].map(status=>[status,s.orders_by_status[status]||0] as [string,number]);
+    const max=Math.max(1,...entries.map(entry=>entry[1]));
+    return entries.map(([status,count])=>({status,count,pct:Math.round((count/max)*100)}));
   });
   readonly overTimeMax=computed(()=>{
     const s=this.summary();
@@ -130,7 +165,7 @@ export class DashboardComponent implements OnInit{
   }
 
   orderValue(items:import('../../core/models').OrderItem[]){
-    return items.reduce((sum,item)=>sum+(item.estimated_value||0)*item.quantity,0);
+    return items.reduce((sum,item)=>sum+(item.estimated_value||0),0);
   }
 
   nextDelivery(items:import('../../core/models').OrderItem[]){
@@ -140,12 +175,47 @@ export class DashboardComponent implements OnInit{
 
   ngOnInit(){this.load();}
 
+  private currentMonth(){
+    const now=new Date();
+    return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  }
+
+  monthLabel(){
+    if(!/^\d{4}-\d{2}$/.test(this.month)) return 'Selected month';
+    return new Date(`${this.month}-01T12:00:00`).toLocaleDateString('en-IN',{month:'long',year:'numeric'});
+  }
+
   load(){
     this.loading.set(true); this.error.set('');
-    this.http.get<DashboardSummary>('/api/dashboard/summary').subscribe({
+    this.http.get<DashboardSummary>('/api/dashboard/summary',{params:{month:this.month}}).subscribe({
       next:s=>{this.summary.set(s);this.loading.set(false);},
       error:err=>{this.loading.set(false);this.error.set(this.message(err));}
     });
+  }
+
+  suggestCustomers(value:string){
+    clearTimeout(this.suggestTimer);
+    const term=(value||'').trim();
+    const request=++this.suggestRequest;
+    if(term.length<2){this.customerSuggestions.set([]);this.suggestOpen.set(false);return;}
+    this.suggestTimer=setTimeout(()=>{
+      this.http.get<Customer[]>('/api/customers',{params:{q:term,limit:'8'}}).subscribe({
+        next:rows=>{
+          if(request!==this.suggestRequest) return;
+          this.customerSuggestions.set(rows);
+          this.suggestOpen.set(rows.length>0);
+        },
+        error:()=>{if(request===this.suggestRequest){this.customerSuggestions.set([]);this.suggestOpen.set(false);}}
+      });
+    },180);
+  }
+
+  hideSuggestions(){setTimeout(()=>this.suggestOpen.set(false),140);}
+
+  openCustomer(customer:Customer){
+    this.suggestOpen.set(false);
+    this.customerSuggestions.set([]);
+    this.router.navigate(['/customers',customer.id]);
   }
 
   goSearch(){

@@ -2,15 +2,15 @@ import {Component,inject,signal,OnInit} from '@angular/core';
 import {CommonModule} from '@angular/common';
 import {FormsModule} from '@angular/forms';
 import {HttpClient,HttpParams} from '@angular/common/http';
-import {Product,PRODUCT_CATEGORIES} from '../../core/models';
+import {Product,PRODUCT_CATEGORIES,InventoryTransaction} from '../../core/models';
 import {StatusBadgeComponent} from '../../shared/status-badge.component';
 import {PaginationComponent} from '../../shared/pagination.component';
 import {ToastService} from '../../shared/toast.service';
 import {AuthService} from '../../core/auth.service';
 
-interface ProductForm{sku:string;name:string;category:string;description:string;unit_weight_g:number|null;price:number|null;quantity:number;min_quantity:number}
+interface ProductForm{sku:string;name:string;category:string;description:string;unit_weight_g:number|null;price:number|null;quantity:number;min_quantity:number;unit:string;purity:string}
 
-const EMPTY_PRODUCT:ProductForm={sku:'',name:'',category:'GOLD',description:'',unit_weight_g:null,price:null,quantity:0,min_quantity:2};
+const EMPTY_PRODUCT:ProductForm={sku:'',name:'',category:'GOLD',description:'',unit_weight_g:null,price:null,quantity:0,min_quantity:2,unit:'g',purity:'22K'};
 
 @Component({selector:'app-products',standalone:true,imports:[CommonModule,FormsModule,StatusBadgeComponent,PaginationComponent],template:`
 <div class="page-head">
@@ -46,24 +46,27 @@ const EMPTY_PRODUCT:ProductForm={sku:'',name:'',category:'GOLD',description:'',u
   <div class="card">
     <div class="table-wrap">
       <table class="table">
-        <thead><tr><th>SKU</th><th>Name</th><th>Category</th><th>Qty</th><th>Reserved</th><th>Available</th><th>Min</th><th>Price</th><th>Status</th><th>Actions</th></tr></thead>
+        <thead><tr><th>SKU</th><th>Name</th><th>Category / purity</th><th>On hand</th><th>Reserved</th><th>Available</th><th>Minimum</th><th>Price</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody>
           @for (p of products(); track p.id) {
             <tr>
               <td class="mono">{{p.sku}}</td>
               <td>{{p.name}}</td>
-              <td><span class="badge badge-default">{{p.category}}</span></td>
-              <td>{{p.quantity}}</td>
-              <td>{{p.reserved_quantity}}</td>
-              <td><span class="pill" [class.low]="p.available_quantity<=p.min_quantity">{{p.available_quantity}}</span></td>
-              <td class="muted">{{p.min_quantity}}</td>
+              <td><span class="badge badge-default">{{p.category}}</span><small class="muted" *ngIf="p.purity"> {{p.purity}}</small></td>
+              <td>{{p.quantity | number:'1.0-3'}} {{p.unit}}</td>
+              <td>{{p.reserved_quantity | number:'1.0-3'}} {{p.unit}}</td>
+              <td><span class="pill" [class.low]="p.available_quantity<=p.min_quantity">{{p.available_quantity | number:'1.0-3'}} {{p.unit}}</span></td>
+              <td class="muted">{{p.min_quantity | number:'1.0-3'}} {{p.unit}}</td>
               <td class="muted">{{p.price!=null ? (p.price | number:'1.2-2') : '—'}}</td>
               <td><app-status-badge [status]="p.is_active?'ACTIVE':'INACTIVE'"/></td>
               <td class="actions-cell">
                 <button class="btn secondary small" (click)="openEdit(p)">Edit</button>
+                <button class="btn primary small" (click)="openStock(p,'Add')">Add stock</button>
+                <button class="btn secondary small" (click)="openStock(p,'Remove')">Remove</button>
                 <button class="btn secondary small" (click)="openAdjust(p)">Adjust</button>
                 <button class="btn secondary small" (click)="openReserve(p)">Reserve</button>
                 <button class="btn secondary small" (click)="openRelease(p)">Release</button>
+                <button class="btn secondary small" (click)="openHistory(p)">History</button>
                 @if (auth.isAdmin()) { <button class="btn danger small" (click)="remove(p)">Delete</button> }
               </td>
             </tr>
@@ -90,12 +93,14 @@ const EMPTY_PRODUCT:ProductForm={sku:'',name:'',category:'GOLD',description:'',u
         </div>
         <div class="field"><label>Description</label><textarea class="input" name="pdesc" [(ngModel)]="formState.description" rows="2"></textarea></div>
         <div class="grid form-grid">
-          <div class="field"><label>Unit weight (g)</label><input class="input" type="number" min="0" step="0.001" name="pweight" [(ngModel)]="formState.unit_weight_g"></div>
+          <div class="field"><label>Stock unit</label><select class="input" name="punit" [(ngModel)]="formState.unit"><option value="g">Grams (g)</option><option value="pcs">Pieces (pcs)</option></select></div>
+          <div class="field"><label>Gold purity / grade</label><input class="input" name="ppurity" [(ngModel)]="formState.purity" placeholder="22K"></div>
+          <div class="field"><label>Unit weight (g, for pieces)</label><input class="input" type="number" min="0" step="0.001" name="pweight" [(ngModel)]="formState.unit_weight_g"></div>
           <div class="field"><label>Price</label><input class="input" type="number" min="0" step="0.01" name="pprice" [(ngModel)]="formState.price"></div>
           @if (!editing()!.id) {
-            <div class="field"><label>Quantity</label><input class="input" type="number" min="0" name="pqty" [(ngModel)]="formState.quantity"></div>
+            <div class="field"><label>Opening stock ({{formState.unit}})</label><input class="input" type="number" min="0" step="0.001" name="pqty" [(ngModel)]="formState.quantity"></div>
           }
-          <div class="field"><label>Low-stock threshold</label><input class="input" type="number" min="0" name="pmin" [(ngModel)]="formState.min_quantity"></div>
+          <div class="field"><label>Low-stock threshold ({{formState.unit}})</label><input class="input" type="number" min="0" step="0.001" name="pmin" [(ngModel)]="formState.min_quantity"></div>
         </div>
         @if (formError()) { <div class="error">{{formError()}}</div> }
         <div class="row modal-actions">
@@ -111,23 +116,41 @@ const EMPTY_PRODUCT:ProductForm={sku:'',name:'',category:'GOLD',description:'',u
   <div class="modal-backdrop" (click)="closeStock()">
     <div class="modal card" (click)="$event.stopPropagation()">
       <h2 class="card-title">{{s.mode}} Stock — {{s.product.sku}}</h2>
-      <p class="muted">Current quantity: {{s.product.quantity}} · Reserved: {{s.product.reserved_quantity}} · Available: {{s.product.available_quantity}}</p>
+      <p class="muted">On hand: {{s.product.quantity | number:'1.0-3'}} {{s.product.unit}} · Reserved: {{s.product.reserved_quantity | number:'1.0-3'}} · Available: {{s.product.available_quantity | number:'1.0-3'}}</p>
       @if (s.mode==='Adjust') {
         <div class="field">
-          <label>Adjustment (+ to add stock, − to remove)</label>
-          <input class="input" type="number" name="sdelta" [(ngModel)]="delta">
+          <label>Adjustment ({{s.product.unit}}, use a negative amount to remove)</label>
+          <input class="input" type="number" step="0.001" name="sdelta" [(ngModel)]="delta">
         </div>
       } @else {
         <div class="field">
-          <label>Quantity</label>
-          <input class="input" type="number" min="1" name="sqty" [(ngModel)]="delta">
+          <label>Quantity ({{s.product.unit}})</label>
+          <input class="input" type="number" min="0.001" step="0.001" name="sqty" [(ngModel)]="delta">
         </div>
+      }
+      @if (s.mode==='Add' || s.mode==='Remove' || s.mode==='Adjust') {
+        <div class="field"><label>Reference</label><input class="input" name="sreference" [(ngModel)]="stockReference" placeholder="Purchase, order number…"></div>
+        <div class="field"><label>Reason / notes</label><textarea class="input" name="sreason" [(ngModel)]="stockReason" rows="2" required></textarea></div>
+        <div class="field"><label>Transaction date</label><input class="input" type="date" name="sdate" [(ngModel)]="stockDate"></div>
       }
       @if (stockError()) { <div class="error">{{stockError()}}</div> }
       <div class="row modal-actions">
         <button class="btn secondary" type="button" (click)="closeStock()">Cancel</button>
         <button class="btn primary" type="button" (click)="applyStock()" [disabled]="applying()">Apply</button>
       </div>
+    </div>
+  </div>
+}
+
+@if (historyProduct(); as product) {
+  <div class="modal-backdrop" (click)="closeHistory()">
+    <div class="modal card inventory-history" (click)="$event.stopPropagation()">
+      <div class="card-head"><div><h2 class="card-title">Stock history · {{product.name}}</h2><p class="muted">{{product.sku}} · {{product.unit}} · Current {{product.quantity | number:'1.0-3'}}</p></div><button class="btn secondary small" type="button" (click)="closeHistory()">Close</button></div>
+      @if (transactionsLoading()) { <div class="empty"><div class="spinner"></div><p>Loading history…</p></div> }
+      @else if (!transactions().length) { <p class="muted">No transactions recorded.</p> }
+      @else { <div class="table-wrap"><table class="table"><thead><tr><th>Date</th><th>Type</th><th>Qty change</th><th>Reserved change</th><th>Balance</th><th>Reference / reason</th><th></th></tr></thead><tbody>
+        @for (t of transactions(); track t.id) { <tr><td>{{t.created_at | date:'medium'}}</td><td><span class="badge badge-default">{{t.transaction_type}}</span></td><td>{{t.quantity_delta | number:'1.0-3'}} {{t.unit}}</td><td>{{t.reserved_delta | number:'1.0-3'}} {{t.unit}}</td><td>{{t.balance_after | number:'1.0-3'}} {{t.unit}}</td><td>{{t.reference||'—'}}<small class="muted" *ngIf="t.reason"><br>{{t.reason}}</small></td><td>@if (canReverse(t)) { <button class="btn secondary small" type="button" (click)="reverse(t)">Reverse</button> }</td></tr> }
+      </tbody></table></div> }
     </div>
   </div>
 }
@@ -144,7 +167,10 @@ export class ProductsComponent implements OnInit{
   readonly editing=signal<(ProductForm&{id:number})|null>(null);
   readonly saving=signal(false);
   readonly formError=signal('');
-  readonly stockModal=signal<{mode:'Adjust'|'Reserve'|'Release';product:Product}|null>(null);
+  readonly stockModal=signal<{mode:'Add'|'Remove'|'Adjust'|'Reserve'|'Release';product:Product}|null>(null);
+  readonly historyProduct=signal<Product|null>(null);
+  readonly transactions=signal<InventoryTransaction[]>([]);
+  readonly transactionsLoading=signal(false);
   readonly stockError=signal('');
   readonly applying=signal(false);
   readonly total=signal(0);
@@ -152,6 +178,7 @@ export class ProductsComponent implements OnInit{
   pageSize=50;
   q=''; category=''; lowStock=false;
   delta:number|null=null;
+  stockReference=''; stockReason=''; stockDate=new Date().toISOString().slice(0,10);
 
   ngOnInit(){this.load();}
 
@@ -179,7 +206,7 @@ export class ProductsComponent implements OnInit{
   openAdd(){this.editing.set({...EMPTY_PRODUCT,id:0});this.formError.set('');}
 
   openEdit(p:Product){
-    this.editing.set({id:p.id,sku:p.sku,name:p.name,category:p.category,description:p.description||'',unit_weight_g:p.unit_weight_g!=null?Number(p.unit_weight_g):null,price:p.price!=null?Number(p.price):null,quantity:p.quantity,min_quantity:p.min_quantity});
+    this.editing.set({id:p.id,sku:p.sku,name:p.name,category:p.category,description:p.description||'',unit_weight_g:p.unit_weight_g!=null?Number(p.unit_weight_g):null,price:p.price!=null?Number(p.price):null,quantity:p.quantity,min_quantity:p.min_quantity,unit:p.unit||'pcs',purity:p.purity||''});
     this.formError.set('');
   }
 
@@ -197,6 +224,8 @@ export class ProductsComponent implements OnInit{
       unit_weight_g:form.unit_weight_g,
       price:form.price,
       min_quantity:form.min_quantity,
+      unit:form.unit,
+      purity:form.purity.trim()||null,
     };
     const request=form.id
       ?this.http.patch<Product>(`/api/products/${form.id}`,payload)
@@ -212,23 +241,52 @@ export class ProductsComponent implements OnInit{
     });
   }
 
-  openAdjust(p:Product){this.delta=null;this.stockError.set('');this.stockModal.set({mode:'Adjust',product:p});}
-  openReserve(p:Product){this.delta=null;this.stockError.set('');this.stockModal.set({mode:'Reserve',product:p});}
-  openRelease(p:Product){this.delta=null;this.stockError.set('');this.stockModal.set({mode:'Release',product:p});}
+  openStock(p:Product,mode:'Add'|'Remove'){this.openStockMode(p,mode);}
+  openAdjust(p:Product){this.openStockMode(p,'Adjust');}
+  openReserve(p:Product){this.openStockMode(p,'Reserve');}
+  openRelease(p:Product){this.openStockMode(p,'Release');}
+  private openStockMode(p:Product,mode:'Add'|'Remove'|'Adjust'|'Reserve'|'Release'){
+    this.delta=null;this.stockReference='';this.stockReason='';this.stockDate=new Date().toISOString().slice(0,10);
+    this.stockError.set('');this.stockModal.set({mode,product:p});
+  }
   closeStock(){this.stockModal.set(null);}
+
+  openHistory(product:Product){
+    this.historyProduct.set(product);this.transactions.set([]);this.transactionsLoading.set(true);
+    this.http.get<InventoryTransaction[]>(`/api/products/${product.id}/transactions`).subscribe({
+      next:list=>{this.transactions.set(list);this.transactionsLoading.set(false);},
+      error:()=>{this.transactionsLoading.set(false);this.toast.error('Could not load stock history.');}
+    });
+  }
+  closeHistory(){this.historyProduct.set(null);this.transactions.set([]);}
+  canReverse(t:InventoryTransaction){return ['ADD','REMOVE','ADJUST','OPENING'].includes(t.transaction_type)&&!this.transactions().some(x=>x.reversal_of_id===t.id);}
+  reverse(t:InventoryTransaction){
+    const p=this.historyProduct();if(!p||!confirm(`Reverse transaction #${t.id}? This creates a separate history entry.`)) return;
+    this.http.post<InventoryTransaction>(`/api/products/${p.id}/transactions/${t.id}/reverse`,{}).subscribe({
+      next:()=>{this.toast.success('Stock transaction reversed.');this.load();this.openHistory(p);},
+      error:err=>this.toast.error(this.message(err,'Could not reverse this transaction.'))
+    });
+  }
 
   applyStock(){
     const modal=this.stockModal();
     if(!modal||this.applying()) return;
-    if(this.delta===null||isNaN(this.delta)||modal.mode!=='Adjust'&&this.delta<1){
+    if(this.delta===null||!Number.isFinite(this.delta)||(modal.mode==='Adjust'?this.delta===0:this.delta<=0)){
       this.stockError.set('Enter a valid quantity.');
+      return;
+    }
+    if(['Add','Remove','Adjust'].includes(modal.mode)&&!this.stockReason.trim()){
+      this.stockError.set('Enter a reason for this stock change.');
       return;
     }
     this.applying.set(true); this.stockError.set('');
     const id=modal.product.id;
+    const transaction={reference:this.stockReference.trim()||null,reason:this.stockReason.trim()||null,transaction_date:this.stockDate?new Date(`${this.stockDate}T00:00:00`).toISOString():null};
     const request=modal.mode==='Adjust'
-      ?this.http.post<Product>(`/api/products/${id}/adjust`,{delta:this.delta})
-      :this.http.post<Product>(`/api/products/${id}/${modal.mode.toLowerCase()}`,{quantity:this.delta});
+      ?this.http.post<Product>(`/api/products/${id}/adjust`,{...transaction,delta:this.delta})
+      :modal.mode==='Add'||modal.mode==='Remove'
+        ?this.http.post<Product>(`/api/products/${id}/stock/${modal.mode.toLowerCase()}`,{...transaction,quantity:this.delta})
+        :this.http.post<Product>(`/api/products/${id}/${modal.mode.toLowerCase()}`,{quantity:this.delta});
     request.subscribe({
       next:()=>{
         this.applying.set(false);

@@ -1,6 +1,6 @@
 from alembic import op
 import sqlalchemy as sa
-revision='0003_audit_notifications_inventory'; down_revision='0002_products_order_items'; branch_labels=None; depends_on=None
+revision='0003_inventory_notifications'; down_revision='0002_products_order_items'; branch_labels=None; depends_on=None
 def upgrade():
     op.create_table('audit_logs',
         sa.Column('id',sa.Integer,primary_key=True),
@@ -52,8 +52,11 @@ def upgrade():
         WHERE s.product_id = p.id
     """)
     op.execute("""
-        UPDATE order_items SET reserved_quantity = quantity
-        WHERE product_id IS NOT NULL AND status NOT IN ('DELIVERED','CANCELLED')
+        UPDATE products p SET reserved_quantity = s.total
+        FROM (SELECT product_id, SUM(quantity) AS total FROM order_items
+              WHERE product_id IS NOT NULL AND status NOT IN ('DELIVERED','CANCELLED')
+              GROUP BY product_id) s
+        WHERE s.product_id = p.id
     """)
 def downgrade():
     op.drop_index('ix_order_items_status','order_items')

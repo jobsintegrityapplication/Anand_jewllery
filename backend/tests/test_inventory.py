@@ -16,7 +16,7 @@ def test_product_crud_and_search(client,db):
     assert [p['sku'] for p in r.json()]==['GOLD-CHAIN-01']
     r=client.get('/api/products',params={'category':'silver'},headers=h)
     assert r.json()==[]
-    r=client.patch(f'/api/products/{pid}',json={'quantity':8},headers=h)
+    r=client.post(f'/api/products/{pid}/stock/add',json={'quantity':3,'reason':'Received supplier stock'},headers=h)
     assert r.status_code==200 and r.json()['quantity']==8
 
 def test_duplicate_sku_rejected(client,db):
@@ -35,9 +35,9 @@ def test_low_stock_filter(client,db):
 def test_adjust_stock(client,db):
     h=admin_headers(client,db)
     pid=client.post('/api/products',json={'sku':'ADJ-001','name':'Adjustable','quantity':5},headers=h).json()['id']
-    r=client.post(f'/api/products/{pid}/adjust',json={'delta':-3},headers=h)
+    r=client.post(f'/api/products/{pid}/adjust',json={'delta':-3,'reason':'Physical stock reconciliation'},headers=h)
     assert r.status_code==200 and r.json()['quantity']==2
-    r=client.post(f'/api/products/{pid}/adjust',json={'delta':-10},headers=h)
+    r=client.post(f'/api/products/{pid}/adjust',json={'delta':-10,'reason':'Physical stock reconciliation'},headers=h)
     assert r.status_code==409
 
 def test_reserve_and_release_stock(client,db):
@@ -69,5 +69,5 @@ def test_quantity_cannot_go_below_reserved(client,db):
     h=admin_headers(client,db)
     pid=client.post('/api/products',json={'sku':'RES-002','name':'Reserved','quantity':5},headers=h).json()['id']
     client.post(f'/api/products/{pid}/reserve',json={'quantity':3},headers=h)
-    r=client.patch(f'/api/products/{pid}',json={'quantity':2},headers=h)
+    r=client.post(f'/api/products/{pid}/stock/remove',json={'quantity':4,'reason':'Test removal'},headers=h)
     assert r.status_code==409

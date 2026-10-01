@@ -2,12 +2,13 @@ import {Component,inject,signal,OnInit} from '@angular/core';
 import {CommonModule} from '@angular/common';
 import {FormsModule} from '@angular/forms';
 import {HttpClient} from '@angular/common/http';
-import {AppUser,AppSettings} from '../../core/models';
+import {RouterLink} from '@angular/router';
+import {AppUser,AppSettings,AuditEntry} from '../../core/models';
 import {StatusBadgeComponent} from '../../shared/status-badge.component';
 import {ToastService} from '../../shared/toast.service';
 import {AuthService} from '../../core/auth.service';
 
-@Component({selector:'app-settings',standalone:true,imports:[CommonModule,FormsModule,StatusBadgeComponent],template:`
+@Component({selector:'app-settings',standalone:true,imports:[CommonModule,FormsModule,StatusBadgeComponent,RouterLink],template:`
 <div class="page-head">
   <div>
     <h1 class="page-title">Settings</h1>
@@ -18,9 +19,9 @@ import {AuthService} from '../../core/auth.service';
 <div class="grid dash-grid">
   <div class="card">
     <h2 class="card-title">Account</h2>
-    @if (auth.user(); as u) {
+    @if (profile(); as u) {
       <div class="info-list">
-        <div class="info-row"><span>User</span><span>#{{u.id}}</span></div>
+        <div class="info-row"><span>User</span><span>{{u.username}}</span></div>
         <div class="info-row"><span>Role</span><span class="badge {{u.role==='ADMIN'?'badge-sent':'badge-default'}}">{{u.role}}</span></div>
       </div>
     }
@@ -47,6 +48,20 @@ import {AuthService} from '../../core/auth.service';
     } @else { <p class="muted">Loading…</p> }
     <p class="muted">Configure these values in the server’s <code>.env</code> file. Secrets are never stored in the browser or this codebase.</p>
   </div>
+</div>
+
+<div class="card" *ngIf="auth.isAdmin()">
+  <div class="card-head"><h2 class="card-title">Recent audit</h2><a class="link" routerLink="/security">Security access</a></div>
+  @if (auditLoading()) { <p class="muted">Loading audit history…</p> }
+  @else if (auditError()) { <p class="error">{{auditError()}}</p> }
+  @else if (!recentAudit().length) { <p class="muted">No audit events have been recorded yet.</p> }
+  @else {
+    <div class="recent-audit-list">
+      @for (entry of recentAudit(); track entry.id) {
+        <div class="recent-audit-row"><strong>{{entry.event_type}} · {{entry.entity}} {{entry.entity_id ? '#'+entry.entity_id : ''}}</strong><span>{{auditActor(entry)}} · {{entry.created_at | date:'short'}}</span></div>
+      }
+    </div>
+  }
 </div>
 
 <div class="card">
@@ -125,14 +140,33 @@ export class SettingsComponent implements OnInit{
   readonly usersLoading=signal(false);
   readonly savingUser=signal(false);
   readonly userError=signal('');
+  readonly recentAudit=signal<AuditEntry[]>([]);
+  readonly auditLoading=signal(false);
+  readonly auditError=signal('');
+  readonly profile=signal<{id:number;username:string;role:string}|null>(null);
   newUser={username:'',password:'',role:'STAFF'};
 
   ngOnInit(){
-    this.loadUsers();
+    if(this.auth.isAdmin()) this.loadUsers();
+    if(this.auth.isAdmin()) this.loadAudit();
+    this.http.get<{id:number;username:string;role:string}>('/api/auth/me').subscribe({next:user=>this.profile.set(user)});
     this.http.get<AppSettings>('/api/settings').subscribe({
       next:s=>this.appSettings.set(s),
       error:()=>this.appSettings.set(null)
     });
+  }
+
+  loadAudit(){
+    this.auditLoading.set(true);
+    this.http.get<AuditEntry[]>('/api/audit',{params:{limit:'5'}}).subscribe({
+      next:rows=>{this.recentAudit.set(rows);this.auditLoading.set(false);},
+      error:()=>{this.auditError.set('Could not load recent audit events.');this.auditLoading.set(false);}
+    });
+  }
+
+  auditActor(entry:AuditEntry){
+    if(entry.meta?.['username']) return String(entry.meta['username']);
+    return entry.user_id===null?'system':`user #${entry.user_id}`;
   }
 
   loadUsers(){

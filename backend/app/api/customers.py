@@ -1,20 +1,21 @@
 from fastapi import APIRouter,Depends,HTTPException,Response
 from sqlalchemy.orm import Session
-from sqlalchemy import or_,func
+from sqlalchemy import or_,func,select
 from app.db.session import get_db
 from app.models.customer import Customer
 from app.models.order import Order,OrderItem
-from app.schemas.customer import CustomerCreate,CustomerUpdate,CustomerOut
+from app.schemas.customer import CustomerCreate,CustomerUpdate,CustomerOut,CustomerListOut
 from app.core.security import current_user
 from app.services.audit import record_audit
 router=APIRouter(prefix='/customers',tags=['customers'])
-@router.get('',response_model=list[CustomerOut],summary='List customers with search (name/phone/email) and pagination')
+@router.get('',response_model=list[CustomerListOut],summary='List customers with search, order count and latest status')
 def list_customers(response:Response,q:str|None=None,skip:int=0,limit:int=50,db:Session=Depends(get_db),_=Depends(current_user)):
-    query=db.query(Customer).order_by(Customer.id.desc())
+    latest_status=select(Order.status).where(Order.customer_id==Customer.id).order_by(Order.id.desc()).limit(1).correlate(Customer).scalar_subquery()
+    query=db.query(Customer,func.count(Order.id).label('order_count'),latest_status.label('latest_order_status')).outerjoin(Order,Order.customer_id==Customer.id).group_by(Customer.id).order_by(Customer.id.desc())
     if q: query=query.filter(or_(Customer.name.ilike(f'%{q}%'),Customer.phone.ilike(f'%{q}%'),Customer.email.ilike(f'%{q}%')))
     total=query.count()
     response.headers['X-Total-Count']=str(total)
-    return query.offset(skip).limit(min(limit,200)).all()
+    return [CustomerListOut.model_validate(customer).model_copy(update={'order_count':count,'latest_order_status':status}) for customer,count,status in query.offset(skip).limit(min(limit,200)).all()]
 @router.post('',response_model=CustomerOut,summary='Create a customer (duplicate phone numbers are rejected)')
 def create_customer(data:CustomerCreate,db:Session=Depends(get_db),_=Depends(current_user)):
     if db.query(Customer).filter(Customer.phone==data.phone).first(): raise HTTPException(409,'Customer phone already exists')
@@ -55,8 +56,18 @@ def update_customer(customer_id:int,data:CustomerUpdate,db:Session=Depends(get_d
     c=db.get(Customer,customer_id)
     if not c: raise HTTPException(404,'Customer not found')
     if data.phone and data.phone!=c.phone and db.query(Customer).filter(Customer.phone==data.phone).first(): raise HTTPException(409,'Customer phone already exists')
-    for k,v in data.model_dump(exclude_unset=True).items(): setattr(c,k,v)
-    record_audit(db,'customer_updated','customer',c.id,user_id=_.id,meta={'fields':list(data.model_dump(exclude_unset=True).keys())})
+    previous_phone=c.phone
+    updates=data.model_dump(exclude_unset=True)
+    for k,v in updates.items(): setattr(c,k,v)
+    record_audit(db,'customer_updated','customer',c.id,user_id=_.id,meta={'fields':list(updates.keys())})
+    if c.phone!=previous_phone:
+        record_audit(db,'phone_corrected','customer',c.id,user_id=_.id,meta={
+            'username':_.username,
+            'role':_.role,
+            'customer':c.name,
+            'previous_phone':previous_phone,
+            'phone':c.phone,
+        })
     db.commit(); db.refresh(c); return c
 @router.delete('/{customer_id}',summary='Delete a customer (blocked when the customer has orders)')
 def delete_customer(customer_id:int,db:Session=Depends(get_db),_=Depends(current_user)):
